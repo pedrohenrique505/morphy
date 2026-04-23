@@ -51,6 +51,7 @@ export function movePiece(
   fromCol: number,
   toRow: number,
   toCol: number,
+  promotionType: PieceType = PieceType.QUEEN
 ): Board {
   const piece = board[fromRow][fromCol];
   if (!piece) return board;
@@ -72,13 +73,16 @@ export function movePiece(
 
   // Handle En Passant
   if (piece.type === PieceType.PAWN && fromCol !== toCol && newBoard[toRow][toCol] === null) {
-    // If a pawn moves diagonally to an empty square, it must be en passant.
-    // The captured pawn is on the same column as destination, but same row as origin.
     newBoard[fromRow][toCol] = null;
   }
 
+  // Handle Promotion
+  const isPromotion = 
+    piece.type === PieceType.PAWN && 
+    (toRow === 0 || toRow === 7);
+
   // Standard Move execution
-  newBoard[toRow][toCol] = piece;
+  newBoard[toRow][toCol] = isPromotion ? { ...piece, type: promotionType } : piece;
   newBoard[fromRow][fromCol] = null;
 
   return newBoard;

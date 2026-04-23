@@ -72,6 +72,29 @@ export default function Board() {
   // dragOverSquare tracks which square the cursor is hovering over during a drag.
   const [dragOverSquare, setDragOverSquare] = useState<{row: number, col: number} | null>(null);
 
+  // Promotion state
+  const [promotionRequest, setPromotionRequest] = useState<{
+    fromRow: number;
+    fromCol: number;
+    toRow: number;
+    toCol: number;
+    piece: Piece;
+  } | null>(null);
+
+  // --- Move Execution ---
+  function executeMove(fromRow: number, fromCol: number, toRow: number, toCol: number, piece: Piece, promotionType?: PieceType) {
+    const move: Move = {
+      fromRow,
+      fromCol,
+      toRow,
+      toCol,
+      piece,
+    };
+    setBoard(movePiece(board, fromRow, fromCol, toRow, toCol, promotionType));
+    setHistory([...history, move]);
+    setTurn(turn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE);
+  }
+
   // --- Tap-to-Move Logic ---
   function handleSquareClick(row: number, col: number) {
     if (selectedSquare) {
@@ -90,16 +113,13 @@ export default function Board() {
       }
 
       if (selectedPiece && isValidMove(board, selectedPiece, selectedSquare.row, selectedSquare.col, row, col, history)) {
-        const move: Move = {
-          fromRow: selectedSquare.row,
-          fromCol: selectedSquare.col,
-          toRow: row,
-          toCol: col,
-          piece: selectedPiece,
-        };
-        setBoard(movePiece(board, selectedSquare.row, selectedSquare.col, row, col));
-        setHistory([...history, move]);
-        setTurn(turn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE);
+        const isPromotion = selectedPiece.type === PieceType.PAWN && (row === 0 || row === 7);
+        
+        if (isPromotion) {
+          setPromotionRequest({ fromRow: selectedSquare.row, fromCol: selectedSquare.col, toRow: row, toCol: col, piece: selectedPiece });
+        } else {
+          executeMove(selectedSquare.row, selectedSquare.col, row, col, selectedPiece);
+        }
       }
       
       cleanupSelection();
@@ -138,16 +158,13 @@ export default function Board() {
     }
 
     if (piece && isValidMove(board, piece, fromRow, fromCol, toRow, toCol, history)) {
-      const move: Move = {
-        fromRow,
-        fromCol,
-        toRow,
-        toCol,
-        piece,
-      };
-      setBoard(movePiece(board, fromRow, fromCol, toRow, toCol));
-      setHistory([...history, move]);
-      setTurn(turn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE);
+      const isPromotion = piece.type === PieceType.PAWN && (toRow === 0 || toRow === 7);
+      
+      if (isPromotion) {
+        setPromotionRequest({ fromRow, fromCol, toRow, toCol, piece });
+      } else {
+        executeMove(fromRow, fromCol, toRow, toCol, piece);
+      }
     }
 
     cleanupSelection();
@@ -165,7 +182,42 @@ export default function Board() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-4 relative">
+      {/* Promotion Modal Overlay */}
+      {promotionRequest && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 rounded-lg backdrop-blur-sm">
+          <div className="bg-white border-2 border-black p-6 rounded-lg shadow-xl flex flex-col items-center gap-4">
+            <h3 className="text-xl font-bold" style={{ fontFamily: 'var(--font-family-ui)' }}>
+              Promote to:
+            </h3>
+            <div className="flex gap-4">
+              {[PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT].map((type) => {
+                const img = PIECE_IMAGES[turn][type];
+                return (
+                  <button
+                    key={type}
+                    onClick={() => {
+                      executeMove(
+                        promotionRequest.fromRow,
+                        promotionRequest.fromCol,
+                        promotionRequest.toRow,
+                        promotionRequest.toCol,
+                        promotionRequest.piece,
+                        type
+                      );
+                      setPromotionRequest(null);
+                    }}
+                    className="p-2 border-2 border-transparent hover:border-black rounded-md transition-all hover:scale-110 active:scale-95 bg-gray-50"
+                  >
+                    <img src={img} alt={type} className="w-16 h-16" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Turn Indicator */}
       <div className="text-lg font-bold" style={{ fontFamily: 'var(--font-family-ui)' }}>
         Turn: {turn}
