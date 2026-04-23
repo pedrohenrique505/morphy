@@ -209,6 +209,114 @@ function isValidKingMove(
   return false;
 }
 
+// --- Check & Checkmate Logic ---
+
+/**
+ * Finds the position of the king for a given color.
+ */
+export function findKing(board: Board, color: PieceColor): { row: number; col: number } | null {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (piece && piece.type === PieceType.KING && piece.color === color) {
+        return { row: r, col: c };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Checks if a square is being attacked by any piece of the given attackerColor.
+ */
+export function isSquareAttacked(
+  board: Board,
+  row: number,
+  col: number,
+  attackerColor: PieceColor,
+  history: Move[]
+): boolean {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (piece && piece.color === attackerColor) {
+        // We use isValidMove to see if the piece CAN move to the square.
+        // Note: This could cause recursion if not careful, but isValidMove 
+        // for most pieces doesn't call isCheck.
+        if (isValidMove(board, piece, r, c, row, col, history)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Determines if the king of the given color is currently in check.
+ */
+export function isCheck(board: Board, color: PieceColor, history: Move[]): boolean {
+  const kingPos = findKing(board, color);
+  if (!kingPos) return false;
+
+  const enemyColor = color === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE;
+  return isSquareAttacked(board, kingPos.row, kingPos.col, enemyColor, history);
+}
+
+/**
+ * A move is "Legal" only if it follows piece rules AND doesn't leave the king in check.
+ */
+export function isLegalMove(
+  board: Board,
+  piece: Piece,
+  fromRow: number,
+  fromCol: number,
+  toRow: number,
+  toCol: number,
+  history: Move[]
+): boolean {
+  // 1. Basic piece movement rules
+  if (!isValidMove(board, piece, fromRow, fromCol, toRow, toCol, history)) {
+    return false;
+  }
+
+  // 2. Special Castling Rule: Cannot castle out of, through, or into check
+  if (piece.type === PieceType.KING && Math.abs(toCol - fromCol) === 2) {
+    const enemyColor = piece.color === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE;
+    
+    // Out of check
+    if (isCheck(board, piece.color, history)) return false;
+
+    // Through check
+    const step = Math.sign(toCol - fromCol);
+    const intermediateBoard = simulateMove(board, fromRow, fromCol, fromRow, fromCol + step);
+    if (isCheck(intermediateBoard, piece.color, history)) return false;
+    
+    // Into check (handled by the general simulation below)
+  }
+
+  // 3. Simulate the move
+  const nextBoard = simulateMove(board, fromRow, fromCol, toRow, toCol);
+  
+  // 4. If the king is in check after the move, it's illegal
+  return !isCheck(nextBoard, piece.color, history);
+}
+
+/**
+ * Simple board simulator (internal use only)
+ */
+function simulateMove(board: Board, fromRow: number, fromCol: number, toRow: number, toCol: number): Board {
+  const nextBoard = board.map(row => [...row]);
+  const piece = nextBoard[fromRow][fromCol];
+  
+  // Basic simulation (doesn't need to handle complex roque/en passant side effects 
+  // because we just want to see if the KING is safe)
+  nextBoard[toRow][toCol] = piece;
+  nextBoard[fromRow][fromCol] = null;
+  
+  return nextBoard;
+}
+
 // --- UI Helpers ---
 export function calculateValidMoves(
   board: Board,
@@ -221,7 +329,8 @@ export function calculateValidMoves(
 
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
-      if (isValidMove(board, piece, fromRow, fromCol, r, c, history)) {
+      // Use isLegalMove instead of isValidMove
+      if (isLegalMove(board, piece, fromRow, fromCol, r, c, history)) {
         moves.push({ row: r, col: c });
       }
     }

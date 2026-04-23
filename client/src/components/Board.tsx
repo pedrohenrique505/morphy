@@ -5,7 +5,7 @@ import { useState } from 'react';
 import type { Board as BoardType, Piece, Move } from '@shared/types';
 import { PieceColor, PieceType } from '@shared/types';
 import { INITIAL_BOARD, movePiece } from '@shared/board';
-import { isValidMove, calculateValidMoves } from '@shared/rules';
+import { isValidMove, calculateValidMoves, isCheck, isLegalMove } from '@shared/rules';
 
 // --- SVG imports ---
 import wp from '../assets/pieces/wp.svg';
@@ -81,6 +81,45 @@ export default function Board() {
     piece: Piece;
   } | null>(null);
 
+  // Check and Checkmate state
+  const [checkStatus, setCheckStatus] = useState<PieceColor | null>(null);
+  const [gameOver, setGameOver] = useState<{ winner: PieceColor | 'DRAW'; type: 'CHECKMATE' | 'STALEMATE' } | null>(null);
+
+  // --- Game Status Check ---
+  function updateGameStatus(currentBoard: BoardType, nextTurn: PieceColor, currentHistory: Move[]) {
+    // 1. Check if the next player is in check
+    const inCheck = isCheck(currentBoard, nextTurn, currentHistory);
+    setCheckStatus(inCheck ? nextTurn : null);
+
+    // 2. Check if the next player has any legal moves
+    let hasLegalMoves = false;
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const piece = currentBoard[r][c];
+        if (piece && piece.color === nextTurn) {
+          const moves = calculateValidMoves(currentBoard, piece, r, c, currentHistory);
+          if (moves.length > 0) {
+            hasLegalMoves = true;
+            break;
+          }
+        }
+      }
+      if (hasLegalMoves) break;
+    }
+
+    // 3. If no legal moves, it's either checkmate or stalemate
+    if (!hasLegalMoves) {
+      if (inCheck) {
+        setGameOver({
+          winner: nextTurn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
+          type: 'CHECKMATE',
+        });
+      } else {
+        setGameOver({ winner: 'DRAW', type: 'STALEMATE' });
+      }
+    }
+  }
+
   // --- Move Execution ---
   function executeMove(fromRow: number, fromCol: number, toRow: number, toCol: number, piece: Piece, promotionType?: PieceType) {
     const move: Move = {
@@ -90,13 +129,22 @@ export default function Board() {
       toCol,
       piece,
     };
-    setBoard(movePiece(board, fromRow, fromCol, toRow, toCol, promotionType));
-    setHistory([...history, move]);
-    setTurn(turn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE);
+    const nextBoard = movePiece(board, fromRow, fromCol, toRow, toCol, promotionType);
+    const nextHistory = [...history, move];
+    const nextTurn = turn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE;
+
+    setBoard(nextBoard);
+    setHistory(nextHistory);
+    setTurn(nextTurn);
+    
+    // Check for check/checkmate for the NEXT player
+    updateGameStatus(nextBoard, nextTurn, nextHistory);
   }
 
   // --- Tap-to-Move Logic ---
   function handleSquareClick(row: number, col: number) {
+    if (gameOver) return; // Disable moves if game is over
+
     if (selectedSquare) {
       if (selectedSquare.row === row && selectedSquare.col === col) {
         cleanupSelection();
@@ -112,7 +160,7 @@ export default function Board() {
         return;
       }
 
-      if (selectedPiece && isValidMove(board, selectedPiece, selectedSquare.row, selectedSquare.col, row, col, history)) {
+      if (selectedPiece && isLegalMove(board, selectedPiece, selectedSquare.row, selectedSquare.col, row, col, history)) {
         const isPromotion = selectedPiece.type === PieceType.PAWN && (row === 0 || row === 7);
         
         if (isPromotion) {
@@ -134,6 +182,7 @@ export default function Board() {
 
   // --- Drag-and-Drop Logic ---
   function handleDragStart(row: number, col: number) {
+    if (gameOver) return;
     const piece = board[row][col];
     if (!piece || piece.color !== turn) return; 
 
@@ -147,7 +196,7 @@ export default function Board() {
   }
 
   function handleDrop(toRow: number, toCol: number) {
-    if (!selectedSquare) return;
+    if (gameOver || !selectedSquare) return;
 
     const { row: fromRow, col: fromCol } = selectedSquare;
     const piece = board[fromRow][fromCol];
@@ -157,7 +206,7 @@ export default function Board() {
       return;
     }
 
-    if (piece && isValidMove(board, piece, fromRow, fromCol, toRow, toCol, history)) {
+    if (piece && isLegalMove(board, piece, fromRow, fromCol, toRow, toCol, history)) {
       const isPromotion = piece.type === PieceType.PAWN && (toRow === 0 || toRow === 7);
       
       if (isPromotion) {
@@ -183,6 +232,26 @@ export default function Board() {
 
   return (
     <div className="flex flex-col items-center gap-4 relative">
+      {/* Game Over Modal */}
+      {gameOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 rounded-lg backdrop-blur-md">
+          <div className="bg-white border-4 border-black p-8 rounded-lg shadow-2xl flex flex-col items-center gap-6 animate-in zoom-in duration-300">
+            <h2 className="text-4xl font-black uppercase tracking-tighter" style={{ fontFamily: 'var(--font-family-ui)' }}>
+              {gameOver.type}
+            </h2>
+            <div className="text-xl font-bold text-gray-600">
+              {gameOver.winner === 'DRAW' ? "It's a draw!" : `Winner: ${gameOver.winner}`}
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-black text-white font-bold rounded-md hover:bg-gray-800 transition-colors"
+            >
+              New Game
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Promotion Modal Overlay */}
       {promotionRequest && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 rounded-lg backdrop-blur-sm">
@@ -249,18 +318,25 @@ export default function Board() {
               m => m.row === rowIndex && m.col === colIndex
             );
 
+            // Check if this is a king in check
+            const isKingInCheck = 
+              square?.type === PieceType.KING && 
+              square?.color === checkStatus;
+
             return (
               <div
                 key={`${rowIndex}-${colIndex}`}
                 className="flex items-center justify-center relative cursor-pointer"
                 style={{
-                  backgroundColor: light
+                  backgroundColor: isKingInCheck
+                    ? 'var(--color-accent-red)' // High contrast red for check
+                    : light
                     ? 'var(--color-square-light)'
                     : 'var(--color-square-dark)',
                   boxShadow: isDragTarget
                     ? 'inset 0 0 0 3px var(--color-accent-green)'
                     : 'none',
-                  opacity: isSelected ? 0.6 : 1, // Changed to 0.6 to look better for tap selection
+                  opacity: isSelected ? 0.6 : 1, 
                 }}
                 onClick={() => handleSquareClick(rowIndex, colIndex)}
                 onDragOver={(e) => handleDragOver(e, rowIndex, colIndex)}
