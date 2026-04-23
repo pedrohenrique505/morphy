@@ -1,9 +1,38 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Google Fonts — must be first @import */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Space+Grotesk:wght@400;700&display=swap');
 
+/* Tailwind v4 — CSS-first configuration */
+@import "tailwindcss";
+
+/*
+  Design tokens from DESIGN.md.
+  Using CSS custom properties so every component can reference them.
+*/
+@theme {
+  /* Board square colors — desaturated tones per DESIGN.md */
+  --color-square-light: #e8e0d4;
+  --color-square-dark: #a89070;
+
+  /* Surface colors from the design system */
+  --color-surface: #121414;
+  --color-surface-container: #1e2020;
+  --color-on-surface: #e2e2e2;
+
+  /* Semantic colors */
+  --color-accent-green: #3cd348;
+  --color-accent-red: #e24848;
+
+  /* Typography */
+  --font-family-ui: 'Inter', sans-serif;
+  --font-family-data: 'Space Grotesk', monospace;
+}
+
+/* Base reset */
 @layer base {
   body {
-    @apply bg-zinc-900 text-zinc-100;
+    font-family: var(--font-family-ui);
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
+    margin: 0;
   }
 }

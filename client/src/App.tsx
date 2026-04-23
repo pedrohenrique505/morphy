@@ -1,26 +1,23 @@
-import './App.css';
+// App.tsx — Root component. Board manages its own state from Phase 2 onward.
+
+import Board from './components/Board';
 
 function App() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 text-black">
-      <h1 className="text-3xl font-bold mb-4">Minimalist Chess</h1>
-      
-      {/* Placeholder for Phase 2 */}
-      <div className="board">
-        {Array.from({ length: 64 }).map((_, i) => {
-          const row = Math.floor(i / 8);
-          const col = i % 8;
-          const isLight = (row + col) % 2 === 0;
-          return (
-            <div key={i} className={`square ${isLight ? 'light' : 'dark'}`}>
-              {/* Piece placeholder */}
-            </div>
-          );
-        })}
-      </div>
+    <main className="flex flex-col items-center justify-center min-h-screen gap-4">
+      <h1
+        className="text-2xl font-bold tracking-tight"
+        style={{ fontFamily: 'var(--font-family-ui)' }}
+      >
+        Morphy Chess
+      </h1>
 
-      <p className="mt-4 text-sm text-gray-600">Waiting for Phase 2...</p>
-    </div>
+      <Board />
+
+      <p className="text-sm" style={{ color: 'var(--color-on-surface)', opacity: 0.5 }}>
+        Phase 2 — Drag & Drop
+      </p>
+    </main>
   );
 }
 
