@@ -52,21 +52,35 @@ export function movePiece(
   toRow: number,
   toCol: number,
 ): Board {
-  // Grab the piece that is being moved.
   const piece = board[fromRow][fromCol];
-
-  // Nothing to move — return the board unchanged.
   if (!piece) return board;
 
-  // map() on the outer array creates a new outer array.
-  // map() on each inner row creates a new inner array.
-  // This is the simplest way to deep-copy a 2D array in JS.
-  return board.map((row, r) =>
-    row.map((square, c) => {
-      if (r === toRow && c === toCol) return piece;   // destination gets the piece
-      if (r === fromRow && c === fromCol) return null; // source becomes empty
-      return square;                                   // everything else stays
-    })
-  );
+  // Create a new board matrix (deep copy)
+  let newBoard = board.map((row) => [...row]);
+
+  // Handle Castling
+  if (piece.type === PieceType.KING && Math.abs(toCol - fromCol) === 2) {
+    const isKingside = toCol > fromCol;
+    const rookFromCol = isKingside ? 7 : 0;
+    const rookToCol = isKingside ? 5 : 3;
+    const rook = newBoard[fromRow][rookFromCol];
+
+    // Move the Rook
+    newBoard[fromRow][rookToCol] = rook;
+    newBoard[fromRow][rookFromCol] = null;
+  }
+
+  // Handle En Passant
+  if (piece.type === PieceType.PAWN && fromCol !== toCol && newBoard[toRow][toCol] === null) {
+    // If a pawn moves diagonally to an empty square, it must be en passant.
+    // The captured pawn is on the same column as destination, but same row as origin.
+    newBoard[fromRow][toCol] = null;
+  }
+
+  // Standard Move execution
+  newBoard[toRow][toCol] = piece;
+  newBoard[fromRow][fromCol] = null;
+
+  return newBoard;
 }
 

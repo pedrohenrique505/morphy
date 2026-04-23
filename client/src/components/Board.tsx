@@ -1,8 +1,8 @@
 // Board.tsx — 8x8 board with drag-and-drop piece movement.
 // State lives here so the board re-renders when a piece moves.
 
-import { useState, useRef } from 'react';
-import type { Board as BoardType, Piece } from '@shared/types';
+import { useState } from 'react';
+import type { Board as BoardType, Piece, Move } from '@shared/types';
 import { PieceColor, PieceType } from '@shared/types';
 import { INITIAL_BOARD, movePiece } from '@shared/board';
 import { isValidMove, calculateValidMoves } from '@shared/rules';
@@ -60,6 +60,9 @@ export default function Board() {
   // Turn management: White always moves first
   const [turn, setTurn] = useState<PieceColor>(PieceColor.WHITE);
 
+  // History of moves - needed for special moves like Castling and En Passant
+  const [history, setHistory] = useState<Move[]>([]);
+
   // Tracks valid moves for the currently dragged piece to display visual feedback
   const [validMoves, setValidMoves] = useState<{row: number, col: number}[]>([]);
 
@@ -71,10 +74,8 @@ export default function Board() {
 
   // --- Tap-to-Move Logic ---
   function handleSquareClick(row: number, col: number) {
-    // If a piece is already selected, this click is an attempt to move or change selection
     if (selectedSquare) {
       if (selectedSquare.row === row && selectedSquare.col === col) {
-        // Tapped the same square -> deselect
         cleanupSelection();
         return;
       }
@@ -82,26 +83,31 @@ export default function Board() {
       const clickedPiece = board[row][col];
       const selectedPiece = board[selectedSquare.row][selectedSquare.col];
 
-      // If clicked another piece of the same color -> change selection
       if (clickedPiece && clickedPiece.color === turn) {
         setSelectedSquare({ row, col });
-        setValidMoves(calculateValidMoves(board, clickedPiece, row, col));
+        setValidMoves(calculateValidMoves(board, clickedPiece, row, col, history));
         return;
       }
 
-      // Otherwise, attempt to move
-      if (selectedPiece && isValidMove(board, selectedPiece, selectedSquare.row, selectedSquare.col, row, col)) {
+      if (selectedPiece && isValidMove(board, selectedPiece, selectedSquare.row, selectedSquare.col, row, col, history)) {
+        const move: Move = {
+          fromRow: selectedSquare.row,
+          fromCol: selectedSquare.col,
+          toRow: row,
+          toCol: col,
+          piece: selectedPiece,
+        };
         setBoard(movePiece(board, selectedSquare.row, selectedSquare.col, row, col));
+        setHistory([...history, move]);
         setTurn(turn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE);
       }
       
       cleanupSelection();
     } else {
-      // No selection yet. Select if it's a piece of the current turn's color.
       const piece = board[row][col];
       if (piece && piece.color === turn) {
         setSelectedSquare({ row, col });
-        setValidMoves(calculateValidMoves(board, piece, row, col));
+        setValidMoves(calculateValidMoves(board, piece, row, col, history));
       }
     }
   }
@@ -111,13 +117,12 @@ export default function Board() {
     const piece = board[row][col];
     if (!piece || piece.color !== turn) return; 
 
-    // We reuse the tap-selection logic so it visually selects while dragging
     setSelectedSquare({ row, col });
-    setValidMoves(calculateValidMoves(board, piece, row, col));
+    setValidMoves(calculateValidMoves(board, piece, row, col, history));
   }
 
   function handleDragOver(e: React.DragEvent, row: number, col: number) {
-    e.preventDefault(); // REQUIRED to allow dropping
+    e.preventDefault(); 
     setDragOverSquare({ row, col });
   }
 
@@ -127,16 +132,21 @@ export default function Board() {
     const { row: fromRow, col: fromCol } = selectedSquare;
     const piece = board[fromRow][fromCol];
 
-    // If dropped on the same square, we just clear the hover highlight
-    // but keep it selected (allows drag-cancel into tap-move)
     if (fromRow === toRow && fromCol === toCol) {
       setDragOverSquare(null);
       return;
     }
 
-    // Move Validation
-    if (piece && isValidMove(board, piece, fromRow, fromCol, toRow, toCol)) {
+    if (piece && isValidMove(board, piece, fromRow, fromCol, toRow, toCol, history)) {
+      const move: Move = {
+        fromRow,
+        fromCol,
+        toRow,
+        toCol,
+        piece,
+      };
       setBoard(movePiece(board, fromRow, fromCol, toRow, toCol));
+      setHistory([...history, move]);
       setTurn(turn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE);
     }
 
